@@ -1,804 +1,8 @@
-// const User = require('../models/UserModel');
-// const Ride = require('../models/RideModel');
-// const geolib = require('geolib');
-// const axios = require('axios');
-
-// // ═══════════════════════════════════════════════════════════════
-// // 🎯 CONFIGURATION
-// // ═══════════════════════════════════════════════════════════════
-// const CONFIG = {
-//   MAX_DETOUR_BUDGET: 500,
-//   MAX_WALK_BUDGET: 500,
-//   PREFER_DETOUR_OVER_WALK: true,
-//   MAX_COMBINED_TOTAL: 600,
-//   ENABLE_SMART_FLEXIBILITY: true,
-//   FLEXIBILITY_MARGIN: 100,
-// };
-
-// // ═══════════════════════════════════════════════════════════════
-// // 🧮 HELPER: Calculate Intermediate Point
-// // ═══════════════════════════════════════════════════════════════
-// const calculateIntermediatePoint = (anchor, target, detourDist, totalGap) => {
-//   if (detourDist >= totalGap) return target; // Rider goes all the way
-//   if (detourDist <= 0) return anchor; // Rider doesn't move
-
-//   const ratio = detourDist / totalGap;
-//   return {
-//     lat: anchor.lat + (target.lat - anchor.lat) * ratio,
-//     lng: anchor.lng + (target.lng - anchor.lng) * ratio
-//   };
-// };
-
-// // ═══════════════════════════════════════════════════════════════
-// // HELPER FUNCTIONS
-// // ═══════════════════════════════════════════════════════════════
-// const generateRoutePolyline = async (fromLat, fromLng, toLat, toLng) => {
-//   try {
-//     const response = await axios.get(
-//       `http://router.project-osrm.org/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}`,
-//       { params: { overview: 'full', geometries: 'geojson' } }
-//     );
-//     return response.data.routes[0].geometry.coordinates.map(c => ({ lat: c[1], lng: c[0] }));
-//   } catch (error) {
-//     console.error('❌ Route generation failed:', error.message);
-//     return generateStraightLinePolyline(fromLat, fromLng, toLat, toLng);
-//   }
-// };
-
-// const generateStraightLinePolyline = (fromLat, fromLng, toLat, toLng) => {
-//   const points = [];
-//   const steps = 20;
-//   for (let i = 0; i <= steps; i++) {
-//     const ratio = i / steps;
-//     points.push({
-//       lat: fromLat + (toLat - fromLat) * ratio,
-//       lng: fromLng + (toLng - fromLng) * ratio
-//     });
-//   }
-//   return points;
-// };
-
-// // ═══════════════════════════════════════════════════════════════
-// // 1. SUBMIT RIDER KYC
-// // ═══════════════════════════════════════════════════════════════
-// exports.submitRiderKyc = async (req, res) => {
-//   try {
-//     const userId = req.user.id;
-//     const files = req.files || {};
-//     const body = req.body;
-
-//     const getPath = (fieldName) => {
-//       return files[fieldName] ? files[fieldName][0].path.replace(/\\/g, "/") : null;
-//     };
-
-//     const kycData = {
-//       citizenshipFront: getPath('citizenshipFront'),
-//       citizenshipBack: getPath('citizenshipBack'),
-//       licenseNumber: body.licenseNumber,
-//       licenseExpiryDate: body.licenseExpiryDate,
-//       licenseIssueDate: body.licenseIssueDate,
-//       licenseImage: getPath('licenseImage'),
-//       selfieWithLicense: getPath('selfieWithLicense'),
-//       vehicleModel: body.vehicleModel,
-//       vehicleProductionYear: body.vehicleProductionYear,
-//       vehiclePlateNumber: body.vehiclePlateNumber,
-//       vehiclePhoto: getPath('vehiclePhoto'),
-//       billbookPage2: getPath('billbookPage2'),
-//       billbookPage3: getPath('billbookPage3'),
-//       submittedAt: new Date()
-//     };
-
-//     await User.findByIdAndUpdate(userId, {
-//       riderStatus: 'pending',
-//       kycDetails: kycData
-//     });
-
-//     res.status(200).json({ message: "KYC Submitted Successfully" });
-//   } catch (error) {
-//     console.error(error);
-//     res.status(500).json({ message: "Server Error processing KYC" });
-//   }
-// };
-
-// // ═══════════════════════════════════════════════════════════════
-// // 2. PUBLISH RIDE
-// // ═══════════════════════════════════════════════════════════════
-// exports.publishRide = async (req, res) => {
-//   try {
-//     const { fromLocation, fromLatLng, toLocation, toLatLng, date, time, price } = req.body;
-    
-//     console.log(`🏍️  Publishing: ${fromLocation} → ${toLocation}`);
-    
-//     const routePath = await generateRoutePolyline(
-//       fromLatLng.lat, fromLatLng.lng, toLatLng.lat, toLatLng.lng
-//     );
-
-//     console.log(`✅ Polyline: ${routePath.length} points`);
-
-//     const newRide = new Ride({
-//       rider: req.user.id,
-//       fromLocation, fromLatLng,
-//       toLocation, toLatLng,
-//       routePath,
-//       date, time, 
-//       price: price || 150
-//     });
-
-//     await newRide.save();
-//     res.status(201).json({ message: "Ride Published", routePoints: routePath.length });
-//   } catch (error) {
-//     console.error('❌ Publish Error:', error);
-//     res.status(500).json({ message: "Server Error" });
-//   }
-// };
-
-// // ═══════════════════════════════════════════════════════════════
-// // 3. GET MY RIDES
-// // ═══════════════════════════════════════════════════════════════
-// exports.getMyRides = async (req, res) => {
-//   try {
-//     const rides = await Ride.find({ rider: req.user.id })
-//       .populate('passengers', 'fullName profilePic phone') 
-//       .sort({ createdAt: -1 });
-    
-//     res.status(200).json(rides);
-//   } catch (error) {
-//     console.error("❌ Get Rides Error:", error);
-//     res.status(500).json({ message: "Server Error" });
-//   }
-// };
-
-// // ═══════════════════════════════════════════════════════════════
-// // 4. SEARCH RIDES - FIXED LOGIC
-// // ═══════════════════════════════════════════════════════════════
-// exports.searchRides = async (req, res) => {
-//   try {
-//     const { pickupLat, pickupLng, dropoffLat, dropoffLng, date } = req.body;
-
-//     const rides = await Ride.find({ status: 'active', date })
-//       .populate('rider', 'fullName profilePic rating kycDetails');
-
-//     const results = [];
-
-//     for (const ride of rides) {
-//       const polyline = ride.routePath;
-//       if (!polyline || polyline.length === 0) continue;
-
-//       // ─────────────────────────────────────────────────────────
-//       // STEP 1: Find Closest Points on Polyline (Anchors)
-//       // ─────────────────────────────────────────────────────────
-//       let pickupAnchorIdx = -1;
-//       let pickupGap = Infinity;
-
-//       for (let i = 0; i < polyline.length; i++) {
-//         const d = geolib.getDistance(
-//           { latitude: pickupLat, longitude: pickupLng },
-//           { latitude: polyline[i].lat, longitude: polyline[i].lng }
-//         );
-//         if (d < pickupGap) {
-//           pickupGap = d;
-//           pickupAnchorIdx = i;
-//         }
-//       }
-
-//       // Dropoff must be after pickup
-//       let dropAnchorIdx = -1;
-//       let dropGap = Infinity;
-
-//       for (let i = pickupAnchorIdx + 1; i < polyline.length; i++) {
-//         const d = geolib.getDistance(
-//           { latitude: dropoffLat, longitude: dropoffLng },
-//           { latitude: polyline[i].lat, longitude: polyline[i].lng }
-//         );
-//         if (d < dropGap) {
-//           dropGap = d;
-//           dropAnchorIdx = i;
-//         }
-//       }
-
-//       if (dropAnchorIdx <= pickupAnchorIdx) continue;
-
-//       const totalGap = pickupGap + dropGap;
-
-//       // ─────────────────────────────────────────────────────────
-//       // STEP 2: Check Feasibility
-//       // ─────────────────────────────────────────────────────────
-//       const maxAllowed = CONFIG.MAX_DETOUR_BUDGET + CONFIG.MAX_WALK_BUDGET + CONFIG.FLEXIBILITY_MARGIN;
-//       if (totalGap > maxAllowed) continue;
-
-//       // ─────────────────────────────────────────────────────────
-//       // STEP 3: Smart Allocation (Prioritize Rider Detour)
-//       // ─────────────────────────────────────────────────────────
-//       let riderPickupDist, riderDropDist, userPickupWalk, userDropWalk;
-//       let pickupMeetingPoint, dropMeetingPoint;
-//       let matchType;
-
-//       if (totalGap <= CONFIG.MAX_DETOUR_BUDGET) {
-//         // CASE 1: Pure Rider Detour (Best for User!)
-//         matchType = 'detour';
-//         riderPickupDist = pickupGap;
-//         riderDropDist = dropGap;
-//         userPickupWalk = 0;
-//         userDropWalk = 0;
-
-//         // Rider goes all the way to passenger locations
-//         pickupMeetingPoint = { lat: pickupLat, lng: pickupLng };
-//         dropMeetingPoint = { lat: dropoffLat, lng: dropoffLng };
-
-//       } else {
-//         // CASE 2: Hybrid (Split Detour + Walk)
-//         matchType = 'smart';
-
-//         // Allocate detour proportionally
-//         const pickupRatio = pickupGap / totalGap;
-//         riderPickupDist = Math.round(CONFIG.MAX_DETOUR_BUDGET * pickupRatio);
-//         riderDropDist = CONFIG.MAX_DETOUR_BUDGET - riderPickupDist;
-
-//         userPickupWalk = pickupGap - riderPickupDist;
-//         userDropWalk = dropGap - riderDropDist;
-
-//         // Check walk budget
-//         if ((userPickupWalk + userDropWalk) > CONFIG.MAX_WALK_BUDGET + CONFIG.FLEXIBILITY_MARGIN) {
-//           continue; // Exceeds walk limit
-//         }
-
-//         // Calculate exact meeting points
-//         const pickupAnchor = polyline[pickupAnchorIdx];
-//         const dropAnchor = polyline[dropAnchorIdx];
-
-//         pickupMeetingPoint = calculateIntermediatePoint(
-//           pickupAnchor,
-//           { lat: pickupLat, lng: pickupLng },
-//           riderPickupDist,
-//           pickupGap
-//         );
-
-//         dropMeetingPoint = calculateIntermediatePoint(
-//           dropAnchor,
-//           { lat: dropoffLat, lng: dropoffLng },
-//           riderDropDist,
-//           dropGap
-//         );
-//       }
-
-//       // ─────────────────────────────────────────────────────────
-//       // STEP 4: Add to Results
-//       // ─────────────────────────────────────────────────────────
-//       results.push({
-//         ...ride._doc,
-        
-//         // ✅ CRITICAL: These are the exact coordinates where rider stops
-//         meetingPoint: pickupMeetingPoint,
-//         dropPoint: dropMeetingPoint,
-
-//         pickupDetour: riderPickupDist,
-//         pickupWalk: userPickupWalk,
-//         dropoffDetour: riderDropDist,
-//         dropoffWalk: userDropWalk,
-//         totalDetour: riderPickupDist + riderDropDist,
-//         totalWalk: userPickupWalk + userDropWalk,
-
-//         matchType,
-//         explanation: matchType === 'detour' 
-//           ? `🎉 Door-to-door! Rider detours ${riderPickupDist + riderDropDist}m total.`
-//           : `Rider detours ${riderPickupDist + riderDropDist}m, you walk ${userPickupWalk + userDropWalk}m.`,
-//         userFriendlyMessage: matchType === 'detour' 
-//           ? '🎉 Perfect! No walking needed' 
-//           : `🚶 Walk ${userPickupWalk + userDropWalk}m`
-//       });
-//     }
-
-//     console.log(`✅ Found ${results.length} matching rides`);
-//     res.status(200).json(results);
-
-//   } catch (e) {
-//     console.error('❌ Search Error:', e);
-//     res.status(500).json({ message: 'Server error' });
-//   }
-// };
-
-// // ═══════════════════════════════════════════════════════════════
-// // 5. UPDATE RIDE STATUS
-// // ═══════════════════════════════════════════════════════════════
-// exports.updateRideStatus = async (req, res) => {
-//   try {
-//     const { status } = req.body;
-    
-//     const ride = await Ride.findOneAndUpdate(
-//       { _id: req.params.id, rider: req.user.id },
-//       { status: status },
-//       { new: true }
-//     );
-
-//     if (!ride) return res.status(404).json({ message: "Ride not found" });
-
-//     res.status(200).json({ message: "Status updated", ride });
-//   } catch (error) {
-//     res.status(500).json({ message: "Server Error" });
-//   }
-// };
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// const User = require('../models/UserModel');
-// const Ride = require('../models/RideModel');
-// const geolib = require('geolib');
-// const axios = require('axios');
-
-// // ═══════════════════════════════════════════════════════════════
-// // 🎯 CONFIGURATION
-// // ═══════════════════════════════════════════════════════════════
-// const CONFIG = {
-//   MAX_DETOUR_BUDGET: 500,
-//   MAX_WALK_BUDGET: 500,
-//   PREFER_DETOUR_OVER_WALK: true,
-//   MAX_COMBINED_TOTAL: 600,
-//   ENABLE_SMART_FLEXIBILITY: true,
-//   FLEXIBILITY_MARGIN: 100,
-// };
-
-// // ═══════════════════════════════════════════════════════════════
-// // 🧮 HELPER: Calculate Intermediate Point
-// // ═══════════════════════════════════════════════════════════════
-// const calculateIntermediatePoint = (anchor, target, detourDist, totalGap) => {
-//   if (detourDist >= totalGap) return target; // Rider goes all the way
-//   if (detourDist <= 0) return anchor; // Rider doesn't move
-
-//   const ratio = detourDist / totalGap;
-//   return {
-//     lat: anchor.lat + (target.lat - anchor.lat) * ratio,
-//     lng: anchor.lng + (target.lng - anchor.lng) * ratio
-//   };
-// };
-
-// // ═══════════════════════════════════════════════════════════════
-// // HELPER FUNCTIONS
-// // ═══════════════════════════════════════════════════════════════
-// const generateRoutePolyline = async (fromLat, fromLng, toLat, toLng) => {
-//   try {
-//     const response = await axios.get(
-//       `http://router.project-osrm.org/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}`,
-//       { params: { overview: 'full', geometries: 'geojson' } }
-//     );
-//     return response.data.routes[0].geometry.coordinates.map(c => ({ lat: c[1], lng: c[0] }));
-//   } catch (error) {
-//     console.error('❌ Route generation failed:', error.message);
-//     return generateStraightLinePolyline(fromLat, fromLng, toLat, toLng);
-//   }
-// };
-
-// const generateStraightLinePolyline = (fromLat, fromLng, toLat, toLng) => {
-//   const points = [];
-//   const steps = 20;
-//   for (let i = 0; i <= steps; i++) {
-//     const ratio = i / steps;
-//     points.push({
-//       lat: fromLat + (toLat - fromLat) * ratio,
-//       lng: fromLng + (toLng - fromLng) * ratio
-//     });
-//   }
-//   return points;
-// };
-
-// // ═══════════════════════════════════════════════════════════════
-// // 1. SUBMIT RIDER KYC
-// // ═══════════════════════════════════════════════════════════════
-// exports.submitRiderKyc = async (req, res) => {
-//   try {
-//     const userId = req.user.id;
-//     const files = req.files || {};
-//     const body = req.body;
-
-//     const getPath = (fieldName) => {
-//       return files[fieldName] ? files[fieldName][0].path.replace(/\\/g, "/") : null;
-//     };
-
-//     const kycData = {
-//       citizenshipFront: getPath('citizenshipFront'),
-//       citizenshipBack: getPath('citizenshipBack'),
-//       licenseNumber: body.licenseNumber,
-//       licenseExpiryDate: body.licenseExpiryDate,
-//       licenseIssueDate: body.licenseIssueDate,
-//       licenseImage: getPath('licenseImage'),
-//       selfieWithLicense: getPath('selfieWithLicense'),
-//       vehicleModel: body.vehicleModel,
-//       vehicleProductionYear: body.vehicleProductionYear,
-//       vehiclePlateNumber: body.vehiclePlateNumber,
-//       vehiclePhoto: getPath('vehiclePhoto'),
-//       billbookPage2: getPath('billbookPage2'),
-//       billbookPage3: getPath('billbookPage3'),
-//       submittedAt: new Date()
-//     };
-
-//     await User.findByIdAndUpdate(userId, {
-//       riderStatus: 'pending',
-//       kycDetails: kycData
-//     });
-
-//     res.status(200).json({ message: "KYC Submitted Successfully" });
-//   } catch (error) {
-//     console.error(error);
-//     res.status(500).json({ message: "Server Error processing KYC" });
-//   }
-// };
-
-// // ═══════════════════════════════════════════════════════════════
-// // 2. PUBLISH RIDE
-// // ═══════════════════════════════════════════════════════════════
-// exports.publishRide = async (req, res) => {
-//   try {
-//     const { fromLocation, fromLatLng, toLocation, toLatLng, date, time, price } = req.body;
-    
-//     console.log(`🏍️  Publishing: ${fromLocation} → ${toLocation}`);
-    
-//     const routePath = await generateRoutePolyline(
-//       fromLatLng.lat, fromLatLng.lng, toLatLng.lat, toLatLng.lng
-//     );
-
-//     console.log(`✅ Polyline: ${routePath.length} points`);
-
-//     const newRide = new Ride({
-//       rider: req.user.id,
-//       fromLocation, fromLatLng,
-//       toLocation, toLatLng,
-//       routePath,
-//       date, time, 
-//       price: price || 150
-//     });
-
-//     await newRide.save();
-//     res.status(201).json({ message: "Ride Published", routePoints: routePath.length });
-//   } catch (error) {
-//     console.error('❌ Publish Error:', error);
-//     res.status(500).json({ message: "Server Error" });
-//   }
-// };
-
-// // ═══════════════════════════════════════════════════════════════
-// // 3. GET MY RIDES
-// // ═══════════════════════════════════════════════════════════════
-// exports.getMyRides = async (req, res) => {
-//   try {
-//     const rides = await Ride.find({ rider: req.user.id })
-//       .populate('passengers', 'fullName profilePic phone') 
-//       .sort({ createdAt: -1 });
-    
-//     res.status(200).json(rides);
-//   } catch (error) {
-//     console.error("❌ Get Rides Error:", error);
-//     res.status(500).json({ message: "Server Error" });
-//   }
-// };
-
-// // ═══════════════════════════════════════════════════════════════
-// // 4. SEARCH RIDES - FIXED LOGIC
-// // ═══════════════════════════════════════════════════════════════
-// exports.searchRides = async (req, res) => {
-//   try {
-//     const { pickupLat, pickupLng, dropoffLat, dropoffLng, date } = req.body;
-
-//     const rides = await Ride.find({ status: 'active', date })
-//       .populate('rider', 'fullName profilePic rating kycDetails');
-
-//     const results = [];
-
-//     for (const ride of rides) {
-//       const polyline = ride.routePath;
-//       if (!polyline || polyline.length === 0) continue;
-
-//       // ─────────────────────────────────────────────────────────
-//       // STEP 1: Find Closest Points on Polyline (Anchors)
-//       // ─────────────────────────────────────────────────────────
-//       let pickupAnchorIdx = -1;
-//       let pickupGap = Infinity;
-
-//       for (let i = 0; i < polyline.length; i++) {
-//         const d = geolib.getDistance(
-//           { latitude: pickupLat, longitude: pickupLng },
-//           { latitude: polyline[i].lat, longitude: polyline[i].lng }
-//         );
-//         if (d < pickupGap) {
-//           pickupGap = d;
-//           pickupAnchorIdx = i;
-//         }
-//       }
-
-//       // Dropoff must be after pickup
-//       let dropAnchorIdx = -1;
-//       let dropGap = Infinity;
-
-//       for (let i = pickupAnchorIdx + 1; i < polyline.length; i++) {
-//         const d = geolib.getDistance(
-//           { latitude: dropoffLat, longitude: dropoffLng },
-//           { latitude: polyline[i].lat, longitude: polyline[i].lng }
-//         );
-//         if (d < dropGap) {
-//           dropGap = d;
-//           dropAnchorIdx = i;
-//         }
-//       }
-
-//       if (dropAnchorIdx <= pickupAnchorIdx) continue;
-
-//       const totalGap = pickupGap + dropGap;
-
-//       // ─────────────────────────────────────────────────────────
-//       // STEP 2: Check Feasibility
-//       // ─────────────────────────────────────────────────────────
-//       const maxAllowed = CONFIG.MAX_DETOUR_BUDGET + CONFIG.MAX_WALK_BUDGET + CONFIG.FLEXIBILITY_MARGIN;
-//       if (totalGap > maxAllowed) continue;
-
-//       // ─────────────────────────────────────────────────────────
-//       // STEP 3: Smart Allocation (Prioritize Rider Detour)
-//       // ─────────────────────────────────────────────────────────
-//       let riderPickupDist, riderDropDist, userPickupWalk, userDropWalk;
-//       let pickupMeetingPoint, dropMeetingPoint;
-//       let matchType;
-
-//       if (totalGap <= CONFIG.MAX_DETOUR_BUDGET) {
-//         // CASE 1: Pure Rider Detour (Best for User!)
-//         matchType = 'detour';
-//         riderPickupDist = pickupGap;
-//         riderDropDist = dropGap;
-//         userPickupWalk = 0;
-//         userDropWalk = 0;
-
-//         // Rider goes all the way to passenger locations
-//         pickupMeetingPoint = { lat: pickupLat, lng: pickupLng };
-//         dropMeetingPoint = { lat: dropoffLat, lng: dropoffLng };
-
-//       } else {
-//         // CASE 2: Hybrid (Split Detour + Walk)
-//         matchType = 'smart';
-
-//         // Allocate detour proportionally
-//         const pickupRatio = pickupGap / totalGap;
-//         riderPickupDist = Math.round(CONFIG.MAX_DETOUR_BUDGET * pickupRatio);
-//         riderDropDist = CONFIG.MAX_DETOUR_BUDGET - riderPickupDist;
-
-//         userPickupWalk = pickupGap - riderPickupDist;
-//         userDropWalk = dropGap - riderDropDist;
-
-//         // Check walk budget
-//         if ((userPickupWalk + userDropWalk) > CONFIG.MAX_WALK_BUDGET + CONFIG.FLEXIBILITY_MARGIN) {
-//           continue; // Exceeds walk limit
-//         }
-
-//         // Calculate exact meeting points
-//         const pickupAnchor = polyline[pickupAnchorIdx];
-//         const dropAnchor = polyline[dropAnchorIdx];
-
-//         pickupMeetingPoint = calculateIntermediatePoint(
-//           pickupAnchor,
-//           { lat: pickupLat, lng: pickupLng },
-//           riderPickupDist,
-//           pickupGap
-//         );
-
-//         dropMeetingPoint = calculateIntermediatePoint(
-//           dropAnchor,
-//           { lat: dropoffLat, lng: dropoffLng },
-//           riderDropDist,
-//           dropGap
-//         );
-//       }
-
-//       // ─────────────────────────────────────────────────────────
-//       // STEP 4: Add to Results
-//       // ─────────────────────────────────────────────────────────
-//       results.push({
-//         ...ride._doc,
-        
-//         // ✅ CRITICAL: These are the exact coordinates where rider stops
-//         meetingPoint: pickupMeetingPoint,
-//         dropPoint: dropMeetingPoint,
-
-//         pickupDetour: riderPickupDist,
-//         pickupWalk: userPickupWalk,
-//         dropoffDetour: riderDropDist,
-//         dropoffWalk: userDropWalk,
-//         totalDetour: riderPickupDist + riderDropDist,
-//         totalWalk: userPickupWalk + userDropWalk,
-
-//         matchType,
-//         explanation: matchType === 'detour' 
-//           ? `🎉 Door-to-door! Rider detours ${riderPickupDist + riderDropDist}m total.`
-//           : `Rider detours ${riderPickupDist + riderDropDist}m, you walk ${userPickupWalk + userDropWalk}m.`,
-//         userFriendlyMessage: matchType === 'detour' 
-//           ? '🎉 Perfect! No walking needed' 
-//           : `🚶 Walk ${userPickupWalk + userDropWalk}m`
-//       });
-//     }
-
-//     console.log(`✅ Found ${results.length} matching rides`);
-//     res.status(200).json(results);
-
-//   } catch (e) {
-//     console.error('❌ Search Error:', e);
-//     res.status(500).json({ message: 'Server error' });
-//   }
-// };
-
-// // ═══════════════════════════════════════════════════════════════
-// // 5. UPDATE RIDE STATUS
-// // ═══════════════════════════════════════════════════════════════
-// exports.updateRideStatus = async (req, res) => {
-//   try {
-//     const { status } = req.body;
-//     const rideId = req.params.id;
-
-//     const ride = await Ride.findOneAndUpdate(
-//       { _id: rideId, rider: req.user.id },
-//       { status: status },
-//       { new: true }
-//     );
-
-//     if (!ride) return res.status(404).json({ message: "Ride not found" });
-
-//     // ✅ FETCH IO from the app object
-//     const io = req.app.get('socketio');
-    
-//     // ✅ BROADCAST to the ride room (Passenger will receive this)
-//     io.to(rideId).emit('status_updated', { 
-//         status: ride.status,
-//         rideId: rideId
-//     });
-
-//     console.log(`📡 Status for ${rideId} updated to: ${status}`);
-
-//     res.status(200).json({ message: "Status updated", ride });
-//   } catch (error) {
-//     console.error("❌ Status Update Error:", error);
-//     res.status(500).json({ message: "Server Error" });
-//   }
-// };
-
-
-// // Add this to riderController.js
-// exports.getPassengerUpcomingRides = async (req, res) => {
-//   try {
-//     // Find rides where the current user's ID exists in the passengers array
-//     const rides = await Ride.find({ passengers: req.user.id })
-//       .populate('rider', 'fullName profilePic rating kycDetails phone')
-//       .sort({ date: 1 });
-    
-//     res.status(200).json(rides);
-//   } catch (error) {
-//     console.error(error);
-//     res.status(500).json({ message: "Server Error fetching passenger rides" });
-//   }
-// };
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 const User = require('../models/UserModel');
 const Ride = require('../models/RideModel');
 const geolib = require('geolib');
 const axios = require('axios');
 
-// ═══════════════════════════════════════════════════════════════
-// 🎯 CONFIGURATION
-// ═══════════════════════════════════════════════════════════════
 const CONFIG = {
   MAX_DETOUR_BUDGET: 500,
   MAX_WALK_BUDGET: 500,
@@ -808,13 +12,9 @@ const CONFIG = {
   FLEXIBILITY_MARGIN: 100,
 };
 
-// ═══════════════════════════════════════════════════════════════
-// 🧮 HELPER: Calculate Intermediate Point
-// ═══════════════════════════════════════════════════════════════
 const calculateIntermediatePoint = (anchor, target, detourDist, totalGap) => {
-  if (detourDist >= totalGap) return target; // Rider goes all the way
-  if (detourDist <= 0) return anchor; // Rider doesn't move
-
+  if (detourDist >= totalGap) return target;
+  if (detourDist <= 0) return anchor;
   const ratio = detourDist / totalGap;
   return {
     lat: anchor.lat + (target.lat - anchor.lat) * ratio,
@@ -822,9 +22,6 @@ const calculateIntermediatePoint = (anchor, target, detourDist, totalGap) => {
   };
 };
 
-// ═══════════════════════════════════════════════════════════════
-// HELPER FUNCTIONS
-// ═══════════════════════════════════════════════════════════════
 const generateRoutePolyline = async (fromLat, fromLng, toLat, toLng) => {
   try {
     const response = await axios.get(
@@ -833,80 +30,21 @@ const generateRoutePolyline = async (fromLat, fromLng, toLat, toLng) => {
     );
     return response.data.routes[0].geometry.coordinates.map(c => ({ lat: c[1], lng: c[0] }));
   } catch (error) {
-    console.error('❌ Route generation failed:', error.message);
-    return generateStraightLinePolyline(fromLat, fromLng, toLat, toLng);
+    return [];
   }
 };
 
-const generateStraightLinePolyline = (fromLat, fromLng, toLat, toLng) => {
-  const points = [];
-  const steps = 20;
-  for (let i = 0; i <= steps; i++) {
-    const ratio = i / steps;
-    points.push({
-      lat: fromLat + (toLat - fromLat) * ratio,
-      lng: fromLng + (toLng - fromLng) * ratio
-    });
-  }
-  return points;
-};
-
-// ═══════════════════════════════════════════════════════════════
-// 1. SUBMIT RIDER KYC
-// ═══════════════════════════════════════════════════════════════
-exports.submitRiderKyc = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const files = req.files || {};
-    const body = req.body;
-
-    const getPath = (fieldName) => {
-      return files[fieldName] ? files[fieldName][0].path.replace(/\\/g, "/") : null;
-    };
-
-    const kycData = {
-      citizenshipFront: getPath('citizenshipFront'),
-      citizenshipBack: getPath('citizenshipBack'),
-      licenseNumber: body.licenseNumber,
-      licenseExpiryDate: body.licenseExpiryDate,
-      licenseIssueDate: body.licenseIssueDate,
-      licenseImage: getPath('licenseImage'),
-      selfieWithLicense: getPath('selfieWithLicense'),
-      vehicleModel: body.vehicleModel,
-      vehicleProductionYear: body.vehicleProductionYear,
-      vehiclePlateNumber: body.vehiclePlateNumber,
-      vehiclePhoto: getPath('vehiclePhoto'),
-      billbookPage2: getPath('billbookPage2'),
-      billbookPage3: getPath('billbookPage3'),
-      submittedAt: new Date()
-    };
-
-    await User.findByIdAndUpdate(userId, {
-      riderStatus: 'pending',
-      kycDetails: kycData
-    });
-
-    res.status(200).json({ message: "KYC Submitted Successfully" });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server Error processing KYC" });
-  }
-};
-
-// ═══════════════════════════════════════════════════════════════
-// 2. PUBLISH RIDE
-// ═══════════════════════════════════════════════════════════════
 exports.publishRide = async (req, res) => {
   try {
-    const { fromLocation, fromLatLng, toLocation, toLatLng, date, time, price } = req.body;
-    
-    console.log(`🏍️  Publishing: ${fromLocation} → ${toLocation}`);
-    
-    const routePath = await generateRoutePolyline(
-      fromLatLng.lat, fromLatLng.lng, toLatLng.lat, toLatLng.lng
-    );
 
-    console.log(`✅ Polyline: ${routePath.length} points`);
+    if (req.user.riderStatus !== 'approved') {
+      return res.status(403).json({ 
+        message: "Access Denied. Your rider account is not approved or is pending verification." 
+      });
+    }
+
+    const { fromLocation, fromLatLng, toLocation, toLatLng, date, time, price } = req.body;
+    const routePath = await generateRoutePolyline(fromLatLng.lat, fromLatLng.lng, toLatLng.lat, toLatLng.lng);
 
     const newRide = new Ride({
       rider: req.user.id,
@@ -914,215 +52,81 @@ exports.publishRide = async (req, res) => {
       toLocation, toLatLng,
       routePath,
       date, time, 
-      price: price || 150
+      price: price || 150,
+      status: 'active'
     });
 
     await newRide.save();
-    res.status(201).json({ message: "Ride Published", routePoints: routePath.length });
+    res.status(201).json({ message: "Ride Published", ride: newRide });
   } catch (error) {
-    console.error('❌ Publish Error:', error);
     res.status(500).json({ message: "Server Error" });
   }
 };
 
-// ═══════════════════════════════════════════════════════════════
-// 3. GET MY RIDES
-// ═══════════════════════════════════════════════════════════════
-exports.getMyRides = async (req, res) => {
-  try {
-    const rides = await Ride.find({ rider: req.user.id })
-      .populate('passengers', 'fullName profilePic phone') 
-      .sort({ createdAt: -1 });
-    
-    res.status(200).json(rides);
-  } catch (error) {
-    console.error("❌ Get Rides Error:", error);
-    res.status(500).json({ message: "Server Error" });
-  }
-};
-
-// ═══════════════════════════════════════════════════════════════
-// 4. SEARCH RIDES - COMPLETE LOGIC WITH PASSENGER ACTUAL LOCATIONS
-// ═══════════════════════════════════════════════════════════════
 exports.searchRides = async (req, res) => {
   try {
     const { pickupLat, pickupLng, dropoffLat, dropoffLng, date } = req.body;
-
-    console.log(`🔍 Search Request:
-      Pickup: (${pickupLat}, ${pickupLng})
-      Dropoff: (${dropoffLat}, ${dropoffLng})
-      Date: ${date}`);
-
     const rides = await Ride.find({ status: 'active', date })
-      .populate('rider', 'fullName profilePic rating kycDetails');
+      .populate('rider', 'fullName profilePic riderRating riderReviewCount feedbackTags kycDetails');
 
     const results = [];
-
     for (const ride of rides) {
       const polyline = ride.routePath;
       if (!polyline || polyline.length === 0) continue;
 
-      // ─────────────────────────────────────────────────────────
-      // STEP 1: Find Closest Points on Polyline (Anchors)
-      // ─────────────────────────────────────────────────────────
-      let pickupAnchorIdx = -1;
-      let pickupGap = Infinity;
-
+      let pickupAnchorIdx = -1, pickupGap = Infinity;
       for (let i = 0; i < polyline.length; i++) {
-        const d = geolib.getDistance(
-          { latitude: pickupLat, longitude: pickupLng },
-          { latitude: polyline[i].lat, longitude: polyline[i].lng }
-        );
-        if (d < pickupGap) {
-          pickupGap = d;
-          pickupAnchorIdx = i;
-        }
+        const d = geolib.getDistance({ latitude: pickupLat, longitude: pickupLng }, { latitude: polyline[i].lat, longitude: polyline[i].lng });
+        if (d < pickupGap) { pickupGap = d; pickupAnchorIdx = i; }
       }
 
-      // Dropoff must be after pickup
-      let dropAnchorIdx = -1;
-      let dropGap = Infinity;
-
+      let dropAnchorIdx = -1, dropGap = Infinity;
       for (let i = pickupAnchorIdx + 1; i < polyline.length; i++) {
-        const d = geolib.getDistance(
-          { latitude: dropoffLat, longitude: dropoffLng },
-          { latitude: polyline[i].lat, longitude: polyline[i].lng }
-        );
-        if (d < dropGap) {
-          dropGap = d;
-          dropAnchorIdx = i;
-        }
+        const d = geolib.getDistance({ latitude: dropoffLat, longitude: dropoffLng }, { latitude: polyline[i].lat, longitude: polyline[i].lng });
+        if (d < dropGap) { dropGap = d; dropAnchorIdx = i; }
       }
 
       if (dropAnchorIdx <= pickupAnchorIdx) continue;
-
       const totalGap = pickupGap + dropGap;
+      if (totalGap > (CONFIG.MAX_DETOUR_BUDGET + CONFIG.MAX_WALK_BUDGET + CONFIG.FLEXIBILITY_MARGIN)) continue;
 
-      // ─────────────────────────────────────────────────────────
-      // STEP 2: Check Feasibility
-      // ─────────────────────────────────────────────────────────
-      const maxAllowed = CONFIG.MAX_DETOUR_BUDGET + CONFIG.MAX_WALK_BUDGET + CONFIG.FLEXIBILITY_MARGIN;
-      if (totalGap > maxAllowed) continue;
-
-      // ─────────────────────────────────────────────────────────
-      // STEP 3: Smart Allocation (Prioritize Rider Detour)
-      // ─────────────────────────────────────────────────────────
-      let riderPickupDist, riderDropDist, userPickupWalk, userDropWalk;
-      let pickupMeetingPoint, dropMeetingPoint;
-      let matchType;
-
-      // ✅ ALWAYS store passenger's original search locations
-      const passengerActualPickup = { lat: pickupLat, lng: pickupLng };
-      const passengerActualDropoff = { lat: dropoffLat, lng: dropoffLng };
-
+      let matchType, rPickDist, rDropDist, uPickWalk, uDropWalk, pickMP, dropMP;
       if (totalGap <= CONFIG.MAX_DETOUR_BUDGET) {
-        // ═════════════════════════════════════════════════════════
-        // CASE 1: DETOUR MATCH - Rider goes all the way
-        // ═════════════════════════════════════════════════════════
         matchType = 'detour';
-        riderPickupDist = pickupGap;
-        riderDropDist = dropGap;
-        userPickupWalk = 0;
-        userDropWalk = 0;
-
-        // ✅ Rider goes EXACTLY to passenger's search locations
-        // So meeting points ARE the passenger's actual locations
-        pickupMeetingPoint = { lat: pickupLat, lng: pickupLng };
-        dropMeetingPoint = { lat: dropoffLat, lng: dropoffLng };
-
-        console.log(`  ✅ DETOUR Match Found:
-          Rider detours: ${riderPickupDist + riderDropDist}m total
-          Meeting point = Passenger location (door-to-door)`);
-
+        rPickDist = pickupGap; rDropDist = dropGap;
+        uPickWalk = 0; uDropWalk = 0;
+        pickMP = { lat: pickupLat, lng: pickupLng };
+        dropMP = { lat: dropoffLat, lng: dropoffLng };
       } else {
-        // ═════════════════════════════════════════════════════════
-        // CASE 2: SMART MATCH - Hybrid (Detour + Walk)
-        // ═════════════════════════════════════════════════════════
         matchType = 'smart';
-
-        // Allocate detour proportionally
-        const pickupRatio = pickupGap / totalGap;
-        riderPickupDist = Math.round(CONFIG.MAX_DETOUR_BUDGET * pickupRatio);
-        riderDropDist = CONFIG.MAX_DETOUR_BUDGET - riderPickupDist;
-
-        userPickupWalk = pickupGap - riderPickupDist;
-        userDropWalk = dropGap - riderDropDist;
-
-        // Check walk budget
-        if ((userPickupWalk + userDropWalk) > CONFIG.MAX_WALK_BUDGET + CONFIG.FLEXIBILITY_MARGIN) {
-          continue; // Exceeds walk limit
-        }
-
-        // ✅ Calculate MEETING POINTS (where rider will stop)
-        // These are DIFFERENT from passenger's search locations
-        const pickupAnchor = polyline[pickupAnchorIdx];
-        const dropAnchor = polyline[dropAnchorIdx];
-
-        pickupMeetingPoint = calculateIntermediatePoint(
-          pickupAnchor,
-          { lat: pickupLat, lng: pickupLng },
-          riderPickupDist,
-          pickupGap
-        );
-
-        dropMeetingPoint = calculateIntermediatePoint(
-          dropAnchor,
-          { lat: dropoffLat, lng: dropoffLng },
-          riderDropDist,
-          dropGap
-        );
-
-        console.log(`  ✅ SMART Match Found:
-          Passenger searches: (${pickupLat}, ${pickupLng})
-          Meeting point: (${pickupMeetingPoint.lat}, ${pickupMeetingPoint.lng})
-          Passenger walks: ${userPickupWalk}m to meeting point`);
+        const ratio = pickupGap / totalGap;
+        rPickDist = Math.round(CONFIG.MAX_DETOUR_BUDGET * ratio);
+        rDropDist = CONFIG.MAX_DETOUR_BUDGET - rPickDist;
+        uPickWalk = pickupGap - rPickDist;
+        uDropWalk = dropGap - rDropDist;
+        pickMP = calculateIntermediatePoint(polyline[pickupAnchorIdx], { lat: pickupLat, lng: pickupLng }, rPickDist, pickupGap);
+        dropMP = calculateIntermediatePoint(polyline[dropAnchorIdx], { lat: dropoffLat, lng: dropoffLng }, rDropDist, dropGap);
       }
 
-      // ─────────────────────────────────────────────────────────
-      // STEP 4: Add to Results with ALL location data
-      // ─────────────────────────────────────────────────────────
       results.push({
         ...ride._doc,
-        
-        // ✅ MEETING POINTS - Where rider will physically stop
-        meetingPoint: pickupMeetingPoint,
-        dropPoint: dropMeetingPoint,
-
-        // ✅ PASSENGER ACTUAL LOCATIONS - What user searched for
-        // This is CRITICAL for drawing dotted walking lines
-        passengerActualPickup: passengerActualPickup,
-        passengerActualDropoff: passengerActualDropoff,
-
-        // Metrics
-        pickupDetour: riderPickupDist,
-        pickupWalk: userPickupWalk,
-        dropoffDetour: riderDropDist,
-        dropoffWalk: userDropWalk,
-        totalDetour: riderPickupDist + riderDropDist,
-        totalWalk: userPickupWalk + userDropWalk,
-
+        pickupMeetingPoint: pickMP,
+        dropMeetingPoint: dropMP,
+        passengerActualPickup: { lat: pickupLat, lng: pickupLng },
+        passengerActualDropoff: { lat: dropoffLat, lng: dropoffLng },
+        pickupDetour: rPickDist, pickupWalk: uPickWalk,
+        dropoffDetour: rDropDist, dropoffWalk: uDropWalk,
         matchType,
-        explanation: matchType === 'detour' 
-          ? `🎉 Door-to-door! Rider detours ${riderPickupDist + riderDropDist}m total.`
-          : `Rider detours ${riderPickupDist + riderDropDist}m, you walk ${userPickupWalk + userDropWalk}m.`,
-        userFriendlyMessage: matchType === 'detour' 
-          ? '🎉 Perfect! No walking needed' 
-          : `🚶 Walk ${userPickupWalk + userDropWalk}m`
+        riderRating: ride.rider.riderRating,
+        riderTags: ride.rider.feedbackTags ? ride.rider.feedbackTags.slice(0, 3) : []
       });
     }
-
-    console.log(`✅ Found ${results.length} matching rides`);
     res.status(200).json(results);
-
   } catch (e) {
-    console.error('❌ Search Error:', e);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Search failure' });
   }
 };
 
-// ═══════════════════════════════════════════════════════════════
-// 5. UPDATE RIDE STATUS
-// ═══════════════════════════════════════════════════════════════
 exports.updateRideStatus = async (req, res) => {
   try {
     const { status } = req.body;
@@ -1135,38 +139,283 @@ exports.updateRideStatus = async (req, res) => {
     );
 
     if (!ride) return res.status(404).json({ message: "Ride not found" });
-
-    // ✅ FETCH IO from the app object
     const io = req.app.get('socketio');
-    
-    // ✅ BROADCAST to the ride room (Passenger will receive this)
-    io.to(rideId).emit('status_updated', { 
-        status: ride.status,
-        rideId: rideId
-    });
-
-    console.log(`📡 Status for ${rideId} updated to: ${status}`);
+    io.to(rideId).emit('status_updated', { status: ride.status, rideId });
 
     res.status(200).json({ message: "Status updated", ride });
   } catch (error) {
-    console.error("❌ Status Update Error:", error);
     res.status(500).json({ message: "Server Error" });
   }
 };
 
-// ═══════════════════════════════════════════════════════════════
-// 6. GET PASSENGER UPCOMING RIDES
-// ═══════════════════════════════════════════════════════════════
-exports.getPassengerUpcomingRides = async (req, res) => {
+exports.processRidePayment = async (req, res) => {
   try {
-    // Find rides where the current user's ID exists in the passengers array
-    const rides = await Ride.find({ passengers: req.user.id })
-      .populate('rider', 'fullName profilePic rating kycDetails phone')
-      .sort({ date: 1 });
-    
+    const { rideId, method, transactionId } = req.body;
+    const ride = await Ride.findById(rideId);
+
+    if (!ride) return res.status(404).json({ message: "Ride not found" });
+
+    if (method === 'esewa') {
+      console.log(`🛡️ Verifying eSewa ID: ${transactionId} for Ride: ${rideId}`);
+
+      const verificationUrl = `${process.env.ESEWA_VERIFY_URL}?txnRefId=${transactionId}`;
+      
+      try {
+        const response = await axios.get(verificationUrl, {
+          headers: {
+            'merchantId': process.env.ESEWA_MERCHANT_ID,
+            'merchantSecret': process.env.ESEWA_SECRET_KEY,
+            'Content-Type': 'application/json'
+          }
+        });
+        const txnDetails = response.data[0];
+
+        if (txnDetails && txnDetails.transactionDetails.status === "COMPLETE") {
+          const esewaAmt = Math.round(parseFloat(txnDetails.totalAmount));
+          const dbAmt = Math.round(ride.price);
+
+          if (esewaAmt === dbAmt) {
+            ride.paymentStatus = 'paid';
+            ride.paymentMethod = 'esewa';
+            ride.transactionId = transactionId;
+            await ride.save();
+
+            const io = req.app.get('socketio');
+            io.to(rideId).emit('payment_confirmed', { status: 'paid', method: 'esewa' });
+
+            return res.status(200).json({ message: "Verified", ride });
+          } else {
+            console.log(`Price Mismatch: eSewa(${esewaAmt}) vs DB(${dbAmt})`);
+            return res.status(400).json({ message: "Verification failed: Amount mismatch" });
+          }
+        } else {
+          return res.status(400).json({ message: "Verification failed: Transaction not complete" });
+        }
+      } catch (err) {
+        console.error("eSewa Server Error:", err.message);
+        return res.status(400).json({ message: "Verification failed at eSewa" });
+      }
+    }
+    ride.paymentMethod = 'cash';
+    await ride.save();
+    const io = req.app.get('socketio');
+    io.to(rideId).emit('payment_initiated', { method: 'cash' });
+    res.status(200).json({ message: "Cash selected", ride });
+  } catch (error) {
+    res.status(500).json({ message: "Server Error", error: error.message });
+  }
+};
+
+exports.confirmPaymentReceived = async (req, res) => {
+  try {
+    const ride = await Ride.findOneAndUpdate(
+      { _id: req.params.id, rider: req.user.id },
+      { paymentStatus: 'paid' },
+      { new: true }
+    );
+
+    const io = req.app.get('socketio');
+    io.to(req.params.id).emit('rider_confirmed_payment', { status: 'paid' });
+
+    res.status(200).json({ message: "Payment confirmed", ride });
+  } catch (error) {
+    res.status(500).json({ message: "Server Error" });
+  }
+};
+
+exports.submitRideFeedback = async (req, res) => {
+  try {
+    const { rideId, rating, tags, targetRole } = req.body;
+    const ride = await Ride.findById(rideId);
+    if (!ride) return res.status(404).json({ message: "Ride not found" });
+    const targetUserId = targetRole === 'rider' ? ride.rider : ride.passengers[0];
+    const user = await User.findById(targetUserId);
+
+    if (!user) return res.status(404).json({ message: "User not found" });
+    if (targetRole === 'rider') {
+      ride.feedbackForRider = { rating, tags };
+    } else {
+      ride.feedbackForPassenger = { rating, tags };
+    }
+    await ride.save();
+    if (rating) {
+      const roleRatingField = targetRole === 'rider' ? 'riderRating' : 'passengerRating';
+      const roleCountField = targetRole === 'rider' ? 'riderReviewCount' : 'passengerReviewCount';
+      const roleTagsField = targetRole === 'rider' ? 'riderFeedbackTags' : 'passengerFeedbackTags';
+      const currentCount = user[roleCountField] || 0;
+      const currentRating = user[roleRatingField] || 5.0;
+      
+      const newCount = currentCount + 1;
+      const newAverage = ((currentRating * currentCount) + rating) / newCount;
+
+      user[roleRatingField] = Number(newAverage.toFixed(1)); 
+      user[roleCountField] = newCount;
+      if (tags && tags.length > 0) {
+        const updatedTags = [...new Set([...(user[roleTagsField] || []), ...tags])];
+        user[roleTagsField] = updatedTags;
+      }
+
+      await user.save();
+    }
+
+    res.status(200).json({ 
+      message: "Feedback submitted successfully", 
+      newRating: rating ? user[targetRole === 'rider' ? 'riderRating' : 'passengerRating'] : null 
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Server error during rating" });
+  }
+};
+
+exports.getMyRides = async (req, res) => {
+  try {
+    const rides = await Ride.find({ rider: req.user.id })
+      .populate('passengers', 'fullName profilePic phone passengerRating feedbackTags') 
+      .sort({ createdAt: -1 });
     res.status(200).json(rides);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server Error fetching passenger rides" });
+    res.status(500).json({ message: "Server Error" });
+  }
+};
+
+exports.getPassengerUpcomingRides = async (req, res) => {
+  try {
+    const rides = await Ride.find({ passengers: req.user.id })
+      .populate('rider', 'fullName profilePic riderRating feedbackTags kycDetails phone')
+      .sort({ date: 1 });
+    res.status(200).json(rides);
+  } catch (error) {
+    res.status(500).json({ message: "Server Error" });
+  }
+};
+exports.deleteRide = async (req, res) => {
+  try {
+    const ride = await Ride.findOne({ _id: req.params.id, rider: req.user.id });
+    
+    if (!ride) return res.status(404).json({ message: "Ride not found or unauthorized" });
+    const restrictedStatuses = ['heading_to_pickup', 'arrived', 'ongoing', 'completed'];
+    if (restrictedStatuses.includes(ride.status)) {
+      return res.status(400).json({ message: "Cannot delete an active or completed ride" });
+    }
+    await Ride.findOneAndDelete({ _id: req.params.id, rider: req.user.id });
+    
+    res.status(200).json({ message: "Ride deleted successfully" });
+  } catch (error) {
+    console.error("Delete Error:", error);
+    res.status(500).json({ message: "Delete failed", error: error.message });
+  }
+};
+
+exports.submitRiderKyc = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const files = req.files || {};
+    const body = req.body;
+
+    const getPath = (fieldName) => 
+      files[fieldName] ? files[fieldName][0].path.replace(/\\/g, "/") : null;
+
+    const updateData = {
+      riderStatus: 'pending'
+    };
+
+    const fields = [
+      'licenseNumber', 'licenseExpiryDate', 'licenseIssueDate',
+      'vehicleModel', 'vehicleProductionYear', 'vehiclePlateNumber'
+    ];
+    fields.forEach(f => {
+      if (body[f]) updateData[`kycDetails.${f}`] = body[f];
+    });
+
+    const kycFiles = [
+      'citizenshipFront', 'citizenshipBack', 'licenseImage', 
+      'selfieWithLicense', 'vehiclePhoto', 'billbookPage2', 'billbookPage3'
+    ];
+    kycFiles.forEach(f => {
+      const path = getPath(f);
+      if (path) updateData[`kycDetails.${f}`] = path;
+    });
+
+    updateData[`kycDetails.submittedAt`] = new Date();
+
+    await User.findByIdAndUpdate(userId, { $set: updateData });
+
+    res.status(200).json({ message: "KYC Submitted" });
+
+  } catch (error) {
+    console.error("KYC Submission Error:", error);
+    res.status(500).json({ message: "KYC Error", error: error.message });
+  }
+};
+
+
+
+exports.editRide = async (req, res) => {
+  try {
+    const { date, time, price } = req.body;
+    const ride = await Ride.findOne({ _id: req.params.id, rider: req.user.id });
+
+    if (!ride) return res.status(404).json({ message: "Ride not found or unauthorized" });
+
+    const restrictedStatuses = ['heading_to_pickup', 'arrived', 'ongoing', 'completed', 'cancelled'];
+    if (restrictedStatuses.includes(ride.status)) {
+      return res.status(400).json({ message: "Cannot edit ride after it has started" });
+    }
+
+    if (date) ride.date = date;
+    if (time) ride.time = time;
+    if (price !== undefined) ride.price = price;
+    await ride.save();
+
+    res.status(200).json({ message: "Ride updated successfully", ride });
+  } catch (error) {
+    console.error("Edit Error:", error);
+    res.status(500).json({ message: "Edit failed", error: error.message });
+  }
+};
+
+
+exports.cancelRide = async (req, res) => {
+  try {
+    const { reason } = req.body;
+    const ride = await Ride.findById(req.params.id);
+
+    if (!ride) return res.status(404).json({ message: "Ride not found" });
+    if (['ongoing', 'completed'].includes(ride.status)) {
+      return res.status(400).json({ message: "Cannot cancel an ongoing or completed ride." });
+    }
+
+    ride.status = 'cancelled';
+    ride.cancellationReason = reason || "No reason provided";
+    ride.cancelledBy = req.user.id;
+    await ride.save();
+
+    res.status(200).json({ message: "Ride cancelled successfully", ride });
+  } catch (error) {
+    res.status(500).json({ message: "Server Error" });
+  }
+};
+
+exports.getRiderHistory = async (req, res) => {
+  try {
+    const history = await Ride.find({
+      rider: req.user.id,
+      status: { $in: ['completed', 'cancelled'] }
+    }).sort({ createdAt: -1 });
+    res.status(200).json(history);
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching history" });
+  }
+};
+
+exports.getPassengerHistory = async (req, res) => {
+  try {
+    const history = await Ride.find({
+      passengers: req.user.id,
+      status: { $in: ['completed', 'cancelled'] }
+    }).populate('rider', 'fullName profilePic').sort({ createdAt: -1 });
+    res.status(200).json(history);
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching history" });
   }
 };
