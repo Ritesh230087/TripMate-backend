@@ -1,19 +1,22 @@
 const Request = require('../models/RequestModel');
 const Ride = require('../models/RideModel');
+const User = require('../models/UserModel');
+const { sendNotification } = require('../utils/notificationHelper');
 
+// Send Request
 exports.sendRequest = async (req, res) => {
   try {
-    const { 
-      rideId, 
+    const {
+      rideId,
       riderId,
-      meetingPoint, 
+      meetingPoint,
       dropPoint,
       passengerActualPickup,
       passengerActualDropoff,
-      pickupDetour, 
-      pickupWalk, 
-      dropoffDetour, 
-      dropoffWalk, 
+      pickupDetour,
+      pickupWalk,
+      dropoffDetour,
+      dropoffWalk,
       matchType
     } = req.body;
 
@@ -25,25 +28,24 @@ exports.sendRequest = async (req, res) => {
       passengerActualPickup,
       passengerActualDropoff
     });
-    if (!meetingPoint || !dropPoint || 
-        !meetingPoint.lat || !meetingPoint.lng || 
-        !dropPoint.lat || !dropPoint.lng) {
-      return res.status(400).json({ 
+
+    if (!meetingPoint || !dropPoint || !meetingPoint.lat || !meetingPoint.lng || !dropPoint.lat || !dropPoint.lng) {
+      return res.status(400).json({
         message: "Missing meeting point coordinates",
         required: "meetingPoint: {lat, lng}, dropPoint: {lat, lng}"
       });
     }
-    if (!passengerActualPickup || !passengerActualDropoff || 
-        !passengerActualPickup.lat || !passengerActualPickup.lng ||
-        !passengerActualDropoff.lat || !passengerActualDropoff.lng) {
-      return res.status(400).json({ 
+
+    if (!passengerActualPickup || !passengerActualDropoff || !passengerActualPickup.lat || !passengerActualPickup.lng || !passengerActualDropoff.lat || !passengerActualDropoff.lng) {
+      return res.status(400).json({
         message: "Missing passenger's actual search locations",
         required: "passengerActualPickup: {lat, lng}, passengerActualDropoff: {lat, lng}",
         hint: "These should come from your search form state (pickupLatLng, dropoffLatLng)"
       });
     }
-    const existing = await Request.findOne({ 
-      rideId, 
+
+    const existing = await Request.findOne({
+      rideId,
       passengerId: req.user.id,
       status: 'pending'
     });
@@ -51,6 +53,7 @@ exports.sendRequest = async (req, res) => {
     if (existing) {
       return res.status(400).json({ message: "You already requested this ride." });
     }
+
     const newRequest = new Request({
       rideId,
       riderId,
@@ -75,6 +78,24 @@ exports.sendRequest = async (req, res) => {
     });
 
     await newRequest.save();
+
+    // Get passenger details for notification
+    const passenger = await User.findById(req.user.id);
+    const ride = await Ride.findById(rideId);
+
+    // Send notification to rider
+    const io = req.app.get('socketio');
+    await sendNotification(
+      io,
+      riderId,
+      req.user.id,
+      '🚗 New Ride Request',
+      `${passenger.fullName} requested to join your ride from ${ride.fromLocation} to ${ride.toLocation}`,
+      'request',
+      rideId,
+      { requestId: newRequest._id.toString() }
+    );
+
     if (matchType === 'detour') {
       console.log(`✅ DETOUR REQUEST Saved:
         Match Type: ${matchType}
@@ -93,27 +114,24 @@ exports.sendRequest = async (req, res) => {
         🚶 Passenger walks: ${dropoffWalk}m from drop point`);
     }
 
-    res.status(201).json({ 
-      message: "Request Sent Successfully", 
-      request: newRequest 
+    res.status(201).json({
+      message: "Request Sent Successfully",
+      request: newRequest
     });
-
   } catch (error) {
     console.error("❌ Request Error:", error);
-    res.status(500).json({ 
-      message: "Server Error", 
-      error: error.message 
-    });
+    res.status(500).json({ message: "Server Error", error: error.message });
   }
 };
 
+// Get Rider Requests
 exports.getRiderRequests = async (req, res) => {
   try {
-    const requests = await Request.find({ 
-      riderId: req.user.id, 
-      status: 'pending' 
+    const requests = await Request.find({
+      riderId: req.user.id,
+      status: 'pending'
     })
-      .populate('passengerId', 'fullName phone profilePic rating')
+      .populate('passengerId', 'fullName phone profilePic passengerRating passengerFeedbackTags')
       .populate('rideId')
       .sort({ createdAt: -1 });
 
@@ -124,137 +142,10 @@ exports.getRiderRequests = async (req, res) => {
   }
 };
 
-// exports.respondToRequest = async (req, res) => {
-//   try {
-//     const { status } = req.body; 
-//     const requestId = req.params.id;
-
-//     if (!['accepted', 'rejected'].includes(status)) {
-//       return res.status(400).json({ message: "Invalid status" });
-//     }
-
-//     const request = await Request.findById(requestId).populate('rideId');
-//     if (!request) return res.status(404).json({ message: "Request not found" });
-
-//     const ride = request.rideId;
-//     if (!ride) return res.status(404).json({ message: "Ride not found" });
-
-//     if (ride.rider.toString() !== req.user.id) {
-//       return res.status(403).json({ message: "Not authorized" });
-//     }
-
-//     if (status === 'accepted') {
-//       const pickupMeetingPoint = {
-//         lat: request.pickupLat,
-//         lng: request.pickupLng
-//       };
-
-//       const dropMeetingPoint = {
-//         lat: request.dropoffLat,
-//         lng: request.dropoffLng
-//       };
-
-//       const passengerActualPickup = {
-//         lat: request.passengerActualPickup.lat,
-//         lng: request.passengerActualPickup.lng
-//       };
-
-//       const passengerActualDropoff = {
-//         lat: request.passengerActualDropoff.lat,
-//         lng: request.passengerActualDropoff.lng
-//       };
-
-//       console.log('🔍 DEBUG - About to save matchType:', request.matchType);
-//       await Ride.findByIdAndUpdate(ride._id, {
-//         status: 'booked',
-//         seats: 0,
-//         $push: { passengers: request.passengerId },
-        
-//         pickupMeetingPoint: pickupMeetingPoint,
-//         dropMeetingPoint: dropMeetingPoint,
-//         passengerActualPickup: passengerActualPickup,
-//         passengerActualDropoff: passengerActualDropoff,
-
-//         matchType: request.matchType
-//       });
-
-//       request.status = 'accepted';
-//       await request.save();
-//       await Request.updateMany(
-//         { rideId: ride._id, _id: { $ne: requestId }, status: 'pending' },
-//         { status: 'rejected' }
-//       );
-//       if (request.matchType === 'detour') {
-//         console.log(`✅ DETOUR Request Accepted:
-//           ┌─ MEETING POINTS (Rider stops here):
-//           │  Pickup: (${pickupMeetingPoint.lat}, ${pickupMeetingPoint.lng})
-//           │  Dropoff: (${dropMeetingPoint.lat}, ${dropMeetingPoint.lng})
-//           └─ PASSENGER LOCATIONS (Same as meeting points):
-//              Pickup: (${passengerActualPickup.lat}, ${passengerActualPickup.lng})
-//              Dropoff: (${passengerActualDropoff.lat}, ${passengerActualDropoff.lng})
-          
-//           📌 Door-to-door service - No walking needed!`);
-//       } else {
-//         console.log(`✅ SMART Request Accepted:
-//           ┌─ MEETING POINTS (Rider stops here):
-//           │  Pickup: (${pickupMeetingPoint.lat}, ${pickupMeetingPoint.lng})
-//           │  Dropoff: (${dropMeetingPoint.lat}, ${dropMeetingPoint.lng})
-//           └─ PASSENGER ACTUAL LOCATIONS (For dotted lines):
-//              Pickup: (${passengerActualPickup.lat}, ${passengerActualPickup.lng})
-//              Dropoff: (${passengerActualDropoff.lat}, ${passengerActualDropoff.lng})
-          
-//           🚶 Passenger walks: ${request.pickupWalk}m pickup, ${request.dropoffWalk}m dropoff
-          
-//           MAP INSTRUCTIONS:
-//           🔵 Draw dotted: (${passengerActualPickup.lat}, ${passengerActualPickup.lng}) → (${pickupMeetingPoint.lat}, ${pickupMeetingPoint.lng})
-//           🔵 Draw solid: (${pickupMeetingPoint.lat}, ${pickupMeetingPoint.lng}) → (${dropMeetingPoint.lat}, ${dropMeetingPoint.lng})
-//           🔵 Draw dotted: (${dropMeetingPoint.lat}, ${dropMeetingPoint.lng}) → (${passengerActualDropoff.lat}, ${passengerActualDropoff.lng})`);
-//       }
-
-//       return res.status(200).json({ 
-//         message: "Request accepted",
-//         locations: {
-//           pickupMeetingPoint,
-//           dropMeetingPoint,
-//           passengerActualPickup,
-//           passengerActualDropoff
-//         },
-//         matchType: request.matchType,
-//         walkingDistances: {
-//           pickup: request.pickupWalk,
-//           dropoff: request.dropoffWalk
-//         }
-//       });
-//     } 
-//     else {
-//       request.status = 'rejected';
-//       await request.save();
-      
-//       console.log(`❌ Request Rejected: ${requestId}`);
-      
-//       return res.status(200).json({ message: "Request rejected" });
-//     }
-
-//   } catch (error) {
-//     console.error('Response Error:', error);
-//     res.status(500).json({ 
-//       message: "Server Error", 
-//       error: error.message 
-//     });
-//   }
-// };
-
-
-
-
-
-
-
-
-// 1. RESPOND TO REQUEST (Rider Action)
+// Respond to Request (Accept/Reject)
 exports.respondToRequest = async (req, res) => {
   try {
-    const { status } = req.body; // 'accepted' or 'rejected'
+    const { status } = req.body;
     const requestId = req.params.id;
 
     if (!['accepted', 'rejected'].includes(status)) {
@@ -267,35 +158,37 @@ exports.respondToRequest = async (req, res) => {
     const ride = request.rideId;
     if (!ride) return res.status(404).json({ message: "Ride not found" });
 
-    // Check ownership
     if (ride.rider.toString() !== req.user.id) {
       return res.status(403).json({ message: "Not authorized" });
     }
 
+    const io = req.app.get('socketio');
+
     if (status === 'accepted') {
-      // ─────────────────────────────────────────────────────────
-      // 1. PREPARE COORDINATES (Crucial to fix the Flutter crash)
-      // ─────────────────────────────────────────────────────────
-      const pickupMeetingPoint = { lat: request.pickupLat, lng: request.pickupLng };
-      const dropMeetingPoint = { lat: request.dropoffLat, lng: request.dropoffLng };
-      const passengerActualPickup = { 
-          lat: request.passengerActualPickup.lat, 
-          lng: request.passengerActualPickup.lng 
-      };
-      const passengerActualDropoff = { 
-          lat: request.passengerActualDropoff.lat, 
-          lng: request.passengerActualDropoff.lng 
+      const pickupMeetingPoint = {
+        lat: request.pickupLat,
+        lng: request.pickupLng
       };
 
-      // ─────────────────────────────────────────────────────────
-      // 2. UPDATE RIDE DOCUMENT (Saves everything needed for UI)
-      // ─────────────────────────────────────────────────────────
+      const dropMeetingPoint = {
+        lat: request.dropoffLat,
+        lng: request.dropoffLng
+      };
+
+      const passengerActualPickup = {
+        lat: request.passengerActualPickup.lat,
+        lng: request.passengerActualPickup.lng
+      };
+
+      const passengerActualDropoff = {
+        lat: request.passengerActualDropoff.lat,
+        lng: request.passengerActualDropoff.lng
+      };
+
       await Ride.findByIdAndUpdate(ride._id, {
         status: 'booked',
         seats: 0,
         $push: { passengers: request.passengerId },
-        
-        // Save these so Flutter widget.ride.pickupMeetingPoint is NOT NULL
         pickupMeetingPoint: pickupMeetingPoint,
         dropMeetingPoint: dropMeetingPoint,
         passengerActualPickup: passengerActualPickup,
@@ -303,35 +196,69 @@ exports.respondToRequest = async (req, res) => {
         matchType: request.matchType
       });
 
-      // 3. Mark THIS request as accepted
       request.status = 'accepted';
       await request.save();
 
-      // ─────────────────────────────────────────────────────────
-      // 4. LOGIC: EXPIRE ALL OTHER PENDING REQUESTS
-      // ─────────────────────────────────────────────────────────
+      // Expire other pending requests
       await Request.updateMany(
-        { 
-          rideId: ride._id, 
-          _id: { $ne: requestId }, 
-          status: 'pending' 
-        },
-        { status: 'expired' } // Set to expired as per your requirement
+        { rideId: ride._id, _id: { $ne: requestId }, status: 'pending' },
+        { status: 'expired' }
       );
+
+      // Get rider details
+      const rider = await User.findById(req.user.id);
+
+      // Send notification to passenger
+      await sendNotification(
+        io,
+        request.passengerId,
+        req.user.id,
+        '✅ Request Accepted',
+        `${rider.fullName} accepted your ride request. Get ready for your journey!`,
+        'accept',
+        ride._id,
+        { requestId: requestId }
+      );
+
+      // Emit real-time update
+      io.to(request.passengerId.toString()).emit('request_accepted', {
+        requestId: requestId,
+        rideId: ride._id
+      });
 
       console.log(`✅ Ride Booked. Coordinates saved. Other requests marked as EXPIRED.`);
 
-      return res.status(200).json({ 
+      return res.status(200).json({
         message: "Request accepted. Coordinates saved and others expired.",
-        locations: { pickupMeetingPoint, dropMeetingPoint }
+        locations: {
+          pickupMeetingPoint,
+          dropMeetingPoint
+        }
       });
-
     } else {
-      // ─────────────────────────────────────────────────────────
-      // REJECTED LOGIC
-      // ─────────────────────────────────────────────────────────
       request.status = 'rejected';
       await request.save();
+
+      // Get rider details
+      const rider = await User.findById(req.user.id);
+
+      // Send notification to passenger
+      await sendNotification(
+        io,
+        request.passengerId,
+        req.user.id,
+        '❌ Request Declined',
+        `${rider.fullName} declined your ride request. Try searching for other rides.`,
+        'reject',
+        ride._id,
+        { requestId: requestId }
+      );
+
+      // Emit real-time update
+      io.to(request.passengerId.toString()).emit('request_rejected', {
+        requestId: requestId
+      });
+
       return res.status(200).json({ message: "Request rejected" });
     }
   } catch (error) {
@@ -340,27 +267,23 @@ exports.respondToRequest = async (req, res) => {
   }
 };
 
-// 2. GET PASSENGER REQUESTS (Passenger View)
-// GET PASSENGER REQUESTS (Passenger View)
+// Get Passenger Requests
 exports.getPassengerRequests = async (req, res) => {
   try {
     const requests = await Request.find({
       passengerId: req.user.id,
       $or: [
         { status: 'pending' },
-        { status: 'accepted' }, 
+        { status: 'accepted' },
         { status: 'rejected', passengerViewed: false },
         { status: 'expired', passengerViewed: false }
       ]
     })
-    .populate('riderId', 'fullName profilePic')
-    // Crucial: Populate 'status' from rideId to check if the ride is finished
-    .populate('rideId', 'fromLocation toLocation date time status') 
-    .sort({ createdAt: -1 });
+      .populate('riderId', 'fullName profilePic')
+      .populate('rideId', 'fromLocation toLocation date time status')
+      .sort({ createdAt: -1 });
 
-    // FILTER LOGIC: Remove requests where the Ride itself is already completed or cancelled
     const activeRequests = requests.filter(req => {
-      // If the ride doesn't exist (deleted) or is completed/cancelled, hide it
       if (!req.rideId || ['completed', 'cancelled'].includes(req.rideId.status)) {
         return false;
       }
@@ -374,13 +297,12 @@ exports.getPassengerRequests = async (req, res) => {
   }
 };
 
-// 3. MARK AS VIEWED (Passenger clear notification)
-// Add/Verify this function in requestController.js
+// Mark Request as Viewed
 exports.markRequestAsViewed = async (req, res) => {
   try {
     const request = await Request.findByIdAndUpdate(
-      req.params.id, 
-      { passengerViewed: true }, 
+      req.params.id,
+      { passengerViewed: true },
       { new: true }
     );
 
