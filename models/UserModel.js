@@ -14,7 +14,8 @@ const UserSchema = new mongoose.Schema({
 
   phone: { 
     type: String, 
-    required: true 
+    // required: true 
+    default: ""
   },
 
   password: { 
@@ -30,7 +31,8 @@ const UserSchema = new mongoose.Schema({
 
   dob: { 
     type: String, 
-    required: true 
+    // required: true
+    default: "" 
   },
 
   profilePic: { 
@@ -81,6 +83,20 @@ const UserSchema = new mongoose.Schema({
     type: String,
      default: ""
   },
+
+  fcmToken: { type: String, default: "" },
+
+  authMethod: { 
+    type: String, 
+    enum: ['manual', 'google'], 
+    default: 'manual' 
+  },
+
+  googleId: { type: String },
+
+  resetPasswordToken: String,
+  resetPasswordExpires: Date,
+
   kycDetails: {
     citizenshipFront: { type: String },
     citizenshipBack: { type: String },
@@ -98,5 +114,8 @@ const UserSchema = new mongoose.Schema({
     submittedAt: { type: Date }
   }
 }, { timestamps: true });
+
+
+
 
 module.exports = mongoose.model('User', UserSchema);
