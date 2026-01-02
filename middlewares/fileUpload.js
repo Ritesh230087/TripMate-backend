@@ -1,16 +1,13 @@
 const multer = require('multer');
 const path = require('path');
 
-// Set Storage Engine
 const storage = multer.diskStorage({
-  destination: './uploads/profiles/', // Images will be saved here
+  destination: './uploads/profiles/', 
   filename: function (req, file, cb) {
-    // Rename file to: fieldname-timestamp.jpg
     cb(null, file.fieldname + '-' + Date.now() + path.extname(file.originalname));
   }
 });
 
-// Check File Type (Images Only)
 function checkFileType(file, cb) {
   const filetypes = /jpeg|jpg|png/;
   const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
@@ -23,10 +20,9 @@ function checkFileType(file, cb) {
   }
 }
 
-// Init Upload
 const upload = multer({
   storage: storage,
-  limits: { fileSize: 2000000 }, // Limit: 2MB
+  limits: { fileSize: 9000000 }, 
   fileFilter: function (req, file, cb) {
     checkFileType(file, cb);
   }
